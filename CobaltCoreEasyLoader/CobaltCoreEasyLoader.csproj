@@ -10,5 +10,4 @@
       <PackageReference Include="Nickel.ModBuildConfig" Version="0.2.0" />
       <PackageReference Include="Samboy063.Tomlet" Version="5.3.0" />
     </ItemGroup>
-
 </Project>

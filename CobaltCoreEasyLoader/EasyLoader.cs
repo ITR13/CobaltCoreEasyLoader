@@ -10,8 +10,6 @@ using Tomlet;
 
 namespace CobaltCoreEasyLoader;
 
-using RegisterCardsFunc = Func<IDeckEntry, List<Type>, List<ICardEntry>>;
-
 public class EasyLoader(
     IPluginLoader<IModManifest, Mod> pluginLoader,
     Func<IPluginPackage<IModManifest>, ILogger> modLoggerGetter,
@@ -22,7 +20,7 @@ public class EasyLoader(
 {
     /*  ModFolder
      *      Sprites/
-     *          Character/
+     *          Characters/
      *              CharA
      *              CharB
      *          Cards
@@ -50,10 +48,29 @@ public class EasyLoader(
 
         var sprites = MaybeLoadSprites(logger, root.GetRelativeDirectory("Sprites"), content.Sprites);
         var decks = MaybeLoadDeck(logger, root.GetRelativeDirectory("Data/Decks"), content.Decks, sprites);
+        var animations = MaybeLoadAnimations(
+            logger,
+            root.GetRelativeDirectory("Sprites/Characters"),
+            content.Characters,
+            sprites,
+            decks
+        );
 
-        List<ICardEntry> RegisterCards(IDeckEntry deck, List<Type> cards)
+        Deck GetDeck(string deckName)
+        {
+            if (decks.TryGetValue(deckName, out var deck))
+            {
+                return deck.Deck;
+            }
+
+            logger.LogWarning("Failed to find deck {}", deckName);
+            return Deck.colorless;
+        }
+
+        List<ICardEntry> RegisterCards(string deckName, List<Type> cards)
         {
             var registeredCards = new List<ICardEntry>();
+            var deck = GetDeck(deckName);
             foreach (var type in cards)
             {
                 var cardMeta = type.GetCustomAttribute<CardMeta>() ??
@@ -67,7 +84,7 @@ public class EasyLoader(
                                    dontOffer = false,
                                    weirdCard = false,
                                };
-                cardMeta.deck = deck.Deck;
+                cardMeta.deck = deck;
                 sprites.TryGetValue($"Cards/{type.FullName}", out var art);
 
                 // TODO: Do localization
@@ -86,11 +103,74 @@ public class EasyLoader(
             return registeredCards;
         }
 
+        ICharacterEntry RegisterCharacter(
+            string deckName,
+            List<Type> starterCard,
+            List<Type> starterArtifacts,
+            bool startLocked
+        )
+        {
+            var deck = GetDeck(deckName);
+
+            // TODO: Do localization
+            var character = content.Characters.RegisterCharacter(
+                deckName,
+                new CharacterConfiguration
+                {
+                    Deck = deck,
+                    StarterCardTypes = starterCard,
+                    StarterArtifactTypes = starterArtifacts,
+                    StartLocked = startLocked,
+
+                    BorderSprite = TryGetSprite("panel") ?? Spr.panels_char_colorless,
+                }
+            );
+
+            if (!animations.TryGetValue(deck, out var chAnimations))
+            {
+                logger.LogError("Couldn't find {} in Sprites/Characters", deckName);
+            }
+            else
+            {
+                if (!chAnimations.ContainsKey("neutral"))
+                {
+                    logger.LogError("Couldn't find Sprites/Characters/{}/neutral", deckName);
+                }
+
+                if (!chAnimations.ContainsKey("mini"))
+                {
+                    logger.LogError("Couldn't find Sprites/Characters/{}/mini", deckName);
+                }
+            }
+
+            return character;
+
+            Spr? TryGetSprite(string spriteName)
+            {
+                var path = $"characters/{deckName}/{spriteName}";
+                if (sprites.TryGetValue(path, out var spr)) return spr.Sprite;
+                logger.LogWarning($"Failed to find sprite {path}");
+
+                return null;
+            }
+        }
+
+        ICharacterEntry RegisterCharacter2(
+            string deckName,
+            List<Type> starterCard,
+            List<Type> starterArtifacts
+        )
+        {
+            return RegisterCharacter(deckName, starterCard, starterArtifacts, false);
+        }
 
         var injector = new CompoundAssemblyPluginLoaderParameterInjector<IModManifest>(
-            new ValueAssemblyPluginLoaderParameterInjector<IModManifest, Dictionary<string, ISpriteEntry>>(sprites),
-            new ValueAssemblyPluginLoaderParameterInjector<IModManifest, Dictionary<string, IDeckEntry>>(decks),
-            new ValueAssemblyPluginLoaderParameterInjector<IModManifest, RegisterCardsFunc>(RegisterCards)
+            InjectParam(sprites),
+            InjectParam(decks),
+            InjectParam(animations),
+            InjectParam(RegisterCards),
+            InjectParam(RegisterCharacter),
+            InjectParam(RegisterCharacter2)
         );
 
         parameterInjector.RegisterParameterInjector(injector);
@@ -104,6 +184,84 @@ public class EasyLoader(
         }
     }
 
+    private static ValueAssemblyPluginLoaderParameterInjector<IModManifest, T> InjectParam<T>(T value)
+    {
+        return new ValueAssemblyPluginLoaderParameterInjector<IModManifest, T>(value);
+    }
+
+    private Dictionary<Deck, Dictionary<string, ICharacterAnimationEntry>> MaybeLoadAnimations(
+        ILogger logger,
+        IDirectoryInfo charactersDirectory,
+        IModCharacters modCharacters,
+        Dictionary<string, ISpriteEntry> sprites,
+        Dictionary<string, IDeckEntry> decks
+    )
+    {
+        if (!charactersDirectory.Exists)
+        {
+            logger.LogWarning("Failed to find Sprites/Characters directory");
+            return new();
+        }
+
+        var animations = new Dictionary<Deck, Dictionary<string, ICharacterAnimationEntry>>();
+        foreach (var chDirectory in charactersDirectory.Directories)
+        {
+            var chName = chDirectory.Name.ToLower();
+            if (!decks.TryGetValue(chName, out var deckEntry))
+            {
+                logger.LogWarning("Failed to find deck {}", chName);
+                continue;
+            }
+
+            var deck = deckEntry.Deck;
+            var chAnimations = new Dictionary<string, ICharacterAnimationEntry>();
+            animations.Add(deck, chAnimations);
+
+            foreach (var anDirectory in chDirectory.Directories)
+            {
+                var anName = anDirectory.Name.ToLower();
+                var files = anDirectory.Files
+                    .Select(file => file.Name)
+                    .Where(name => Path.GetExtension(name) == ".png")
+                    .Select(name => name[..^4].ToLower())
+                    .OrderBy(SafeParse)
+                    .ToList();
+                files.Sort();
+
+                var frames = new List<Spr>();
+                foreach (var file in files)
+                {
+                    var path = $"characters/{chName}/{anName}/{file}";
+                    frames.Add(sprites[path].Sprite);
+                }
+
+                var animation = modCharacters.RegisterCharacterAnimation(
+                    $"{chName}/{anName}",
+                    new CharacterAnimationConfiguration
+                    {
+                        Deck = deck,
+                        LoopTag = anName,
+                        Frames = frames,
+                    }
+                );
+                chAnimations.Add(anName, animation);
+                continue;
+
+                int SafeParse(string name)
+                {
+                    if (!int.TryParse(name, out var i))
+                    {
+                        logger.LogWarning("Failed to parse {} in folder {}", name, anDirectory.FullName);
+                    }
+
+                    return i;
+                }
+            }
+        }
+
+        return animations;
+    }
+
     private Dictionary<string, IDeckEntry> MaybeLoadDeck(
         ILogger logger,
         IDirectoryInfo deckRoot,
@@ -111,6 +269,12 @@ public class EasyLoader(
         Dictionary<string, ISpriteEntry> spriteEntries
     )
     {
+        if (!deckRoot.Exists)
+        {
+            logger.LogWarning("Failed to find Decks directory");
+            return new();
+        }
+
         var decks = new Dictionary<string, IDeckEntry>();
 
         foreach (var fileInfo in deckRoot.Files)
@@ -148,7 +312,7 @@ public class EasyLoader(
             Spr? TryGetSprite(string spriteName, bool notNull = false)
             {
                 var path = $"decks/{name}/{spriteName}";
-                if (spriteEntries.TryGetValue(path, out var spr)) return spr!.Sprite;
+                if (spriteEntries.TryGetValue(path, out var spr)) return spr.Sprite;
                 if (notNull)
                 {
                     logger.LogWarning($"Failed to find sprite {path}");
