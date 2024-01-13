@@ -21,12 +21,12 @@ public struct EasyDeckDef
 
         double GetColor(int i)
         {
-            return easyDeckDef.Color.Length > i ? easyDeckDef.Color[i] : 1.0f;
+            return i < easyDeckDef.Color.Length ? easyDeckDef.Color[i] : 1.0f;
         }
 
         double GetTitleColor(int i)
         {
-            return easyDeckDef.TitleColor.Length > i ? easyDeckDef.TitleColor[i] : 1.0f;
+            return i < easyDeckDef.TitleColor.Length ? easyDeckDef.TitleColor[i] : 1.0f;
         }
     }
 }

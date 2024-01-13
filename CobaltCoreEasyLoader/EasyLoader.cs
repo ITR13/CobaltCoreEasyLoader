@@ -77,7 +77,7 @@ public class EasyLoader(
         );
         var decks = MaybeLoadDeck(
             logger,
-            root.GetRelativeDirectory("Data/Decks"),
+            root.GetRelativeDirectory("Data"),
             content.Decks,
             RequestLocalization,
             sprites
