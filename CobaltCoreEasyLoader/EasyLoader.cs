@@ -1,5 +1,8 @@
-﻿using System.Reflection;
+﻿using System.Globalization;
+using System.Reflection;
+using System.Text;
 using CobaltCoreEasyLoader.Data;
+using CsvHelper;
 using Microsoft.Extensions.Logging;
 using Nanoray.PluginManager;
 using Newtonsoft.Json;
@@ -46,8 +49,39 @@ public class EasyLoader(
         var helper = modHelperGetter(package);
         var content = helper.Content;
 
-        var sprites = MaybeLoadSprites(logger, root.GetRelativeDirectory("Sprites"), content.Sprites);
-        var decks = MaybeLoadDeck(logger, root.GetRelativeDirectory("Data/Decks"), content.Decks, sprites);
+        var localization = MaybeLoadLocalization(logger, root.GetRelativeFile("Data/Localization.csv"));
+        var missingLocalization = new List<string>();
+        var usedLocalization = new HashSet<string>();
+
+        SingleLocalizationProvider? RequestLocalization(string key)
+        {
+            var notSeen = usedLocalization!.Add(key);
+            if (localization!.TryGetValue(key, out var provider))
+            {
+                return provider;
+            }
+
+            if (notSeen)
+            {
+                missingLocalization.Add(key);
+            }
+
+            return null;
+        }
+
+
+        var sprites = MaybeLoadSprites(
+            logger,
+            root.GetRelativeDirectory("Sprites"),
+            content.Sprites
+        );
+        var decks = MaybeLoadDeck(
+            logger,
+            root.GetRelativeDirectory("Data/Decks"),
+            content.Decks,
+            RequestLocalization,
+            sprites
+        );
         var animations = MaybeLoadAnimations(
             logger,
             root.GetRelativeDirectory("Sprites/Characters"),
@@ -85,16 +119,18 @@ public class EasyLoader(
                                    weirdCard = false,
                                };
                 cardMeta.deck = deck;
-                sprites.TryGetValue($"Cards/{type.FullName}", out var art);
+                var typeName = (type.FullName ?? type.Name).ToLower();
+                var name = $"cards/{type.Name.ToLower()}";
+                sprites.TryGetValue(name, out var art);
 
-                // TODO: Do localization
                 var card = content.Cards.RegisterCard(
-                    type.FullName ?? type.Name,
+                    typeName,
                     new CardConfiguration
                     {
                         CardType = type,
                         Meta = cardMeta,
                         Art = art?.Sprite,
+                        Name = RequestLocalization(name),
                     }
                 );
                 registeredCards.Add(card);
@@ -112,7 +148,6 @@ public class EasyLoader(
         {
             var deck = GetDeck(deckName);
 
-            // TODO: Do localization
             var character = content.Characters.RegisterCharacter(
                 deckName,
                 new CharacterConfiguration
@@ -123,6 +158,7 @@ public class EasyLoader(
                     StartLocked = startLocked,
 
                     BorderSprite = TryGetSprite("panel") ?? Spr.panels_char_colorless,
+                    Description = RequestLocalization($"{deckName}/desc"),
                 }
             );
 
@@ -149,7 +185,7 @@ public class EasyLoader(
             {
                 var path = $"characters/{deckName}/{spriteName}";
                 if (sprites.TryGetValue(path, out var spr)) return spr.Sprite;
-                logger.LogWarning($"Failed to find sprite {path}");
+                logger.LogWarning("Failed to find sprite {}", path);
 
                 return null;
             }
@@ -170,7 +206,8 @@ public class EasyLoader(
             InjectParam(animations),
             InjectParam(RegisterCards),
             InjectParam(RegisterCharacter),
-            InjectParam(RegisterCharacter2)
+            InjectParam(RegisterCharacter2),
+            InjectParam(RequestLocalization)
         );
 
         parameterInjector.RegisterParameterInjector(injector);
@@ -181,7 +218,67 @@ public class EasyLoader(
         finally
         {
             parameterInjector.UnregisterParameterInjector(injector);
+            FinalizeLocalization();
         }
+
+        void FinalizeLocalization()
+        {
+            var sb = new StringBuilder();
+            if (usedLocalization.Count != (localization.Count + missingLocalization.Count))
+            {
+                var count = 0;
+                foreach (var key in localization.Keys.Where(key => usedLocalization.Contains(key)))
+                {
+                    count++;
+                    sb.AppendLine(key);
+                }
+
+                sb.Insert(0, $"Found {count} unused localization lines\n");
+                logger.LogWarning("{}", sb.ToString());
+                sb.Clear();
+
+            }
+
+            if (missingLocalization.Count == 0) return;
+            sb.AppendLine($"Found {missingLocalization.Count} missing localization entries");
+            sb.AppendJoin('\n', missingLocalization);
+            logger.LogWarning("{}", sb.ToString());
+        }
+    }
+
+    private Dictionary<string, SingleLocalizationProvider> MaybeLoadLocalization(ILogger logger, IFileInfo fileInfo)
+    {
+        if (!fileInfo.Exists)
+        {
+            logger.LogWarning("Failed to find {}", fileInfo.FullName);
+            return new();
+        }
+
+        var localization = new Dictionary<string, SingleLocalizationProvider>();
+
+        using var streamReader = new StreamReader(fileInfo.OpenRead());
+        using var csvParser = new CsvParser(streamReader, CultureInfo.InvariantCulture);
+
+        if (!csvParser.Read())
+        {
+            logger.LogWarning("Localiation file at {} was empty!", fileInfo.FullName);
+            return new Dictionary<string, SingleLocalizationProvider>();
+        }
+        var headers = csvParser.Record!.ToList();
+        while (csvParser.Read())
+        {
+            var dict = headers.Zip(csvParser.Record!).ToDictionary();
+            if (dict.Count == 0) continue;
+            if (!dict.TryGetValue("key", out var key))
+            {
+                logger.LogWarning("Localization file at {} is missing key column", fileInfo.FullName);
+                continue;
+            }
+
+            localization.Add(key, dict.GetValueOrDefault);
+        }
+        
+        return localization;
     }
 
     private static ValueAssemblyPluginLoaderParameterInjector<IModManifest, T> InjectParam<T>(T value)
@@ -266,6 +363,7 @@ public class EasyLoader(
         ILogger logger,
         IDirectoryInfo deckRoot,
         IModDecks contentDecks,
+        Func<string, SingleLocalizationProvider?> requestLocalization,
         Dictionary<string, ISpriteEntry> spriteEntries
     )
     {
@@ -293,7 +391,6 @@ public class EasyLoader(
             var defaultCardArt = TryGetSprite($"defaultcardart", true) ?? Spr.cards_colorless;
             var overBorderSprite = TryGetSprite("overbordersprite");
 
-            // TODO: Add Localization
             var deck = contentDecks.RegisterDeck(
                 name,
                 new DeckConfiguration
@@ -301,7 +398,7 @@ public class EasyLoader(
                     Definition = easyDeckDef,
                     BorderSprite = borderSprite,
                     DefaultCardArt = defaultCardArt,
-                    Name = null,
+                    Name = requestLocalization($"{name}/name"),
                     OverBordersSprite = overBorderSprite,
                 }
             );
