@@ -112,6 +112,7 @@ public class EasyLoader(
         {
             var registeredCards = new List<ICardEntry>();
             var deck = GetDeck(deckName);
+            var modCards = content!.Cards;
             foreach (var type in cards)
             {
                 var cardMeta = type.GetCustomAttribute<CardMeta>() ??
@@ -129,8 +130,12 @@ public class EasyLoader(
                 var typeName = (type.FullName ?? type.Name).ToLower();
                 var name = $"cards/{type.Name.ToLower()}";
                 sprites.TryGetValue(name, out var art);
+                if (art == null)
+                {
+                    logger.LogWarning($"Failed to find sprite {name}");
+                }
 
-                var card = content.Cards.RegisterCard(
+                var card = modCards.RegisterCard(
                     typeName,
                     new CardConfiguration
                     {
@@ -144,6 +149,48 @@ public class EasyLoader(
             }
 
             return registeredCards;
+        }
+
+        List<IArtifactEntry> RegisterArtifacts(string deckName, List<Type> artifacts)
+        {
+            var registeredArtifacts = new List<IArtifactEntry>();
+            var deck = GetDeck(deckName);
+            var modArtifacts = content!.Artifacts;
+            foreach (var type in artifacts)
+            {
+                var artifactMeta = type.GetCustomAttribute<ArtifactMeta>() ??
+                               new ArtifactMeta
+                               {
+                                   unremovable = false,
+                                   dontLoc = false,
+                                   extraGlossary = [],
+                                   pools = [ArtifactPool.Common],
+                               };
+                artifactMeta.owner = deck;
+
+                var typeName = (type.FullName ?? type.Name).ToLower();
+                var name = $"artifacts/{type.Name.ToLower()}";
+                sprites.TryGetValue(name, out var art);
+                if (art == null)
+                {
+                    logger.LogWarning($"Failed to find sprite {name}");
+                }
+
+                var artifact = modArtifacts.RegisterArtifact(
+                    typeName,
+                    new ArtifactConfiguration()
+                    {
+                        ArtifactType = type,
+                        Name = RequestLocalization(name + "_name"),
+                        Description = RequestLocalization(name + "_desc"),
+                        Meta = artifactMeta,
+                        Sprite = art?.Sprite ?? Spr.artifacts_Unknown,
+                    }
+                );
+                registeredArtifacts.Add(artifact);
+            }
+
+            return registeredArtifacts;
         }
 
         ICharacterEntry RegisterCharacter(
@@ -212,6 +259,7 @@ public class EasyLoader(
             InjectParam(decks),
             InjectParam(animations),
             InjectParam(RegisterCards),
+            InjectParam(RegisterArtifacts),
             InjectParam(RegisterCharacter),
             InjectParam(RegisterCharacter2),
             InjectParam(RequestLocalization)
@@ -471,7 +519,7 @@ public class EasyLoader(
         return TomletMain.To<T>(text)!;
     }
 
-    private T JsonParse<T>(IFileInfo info, bool full=false)
+    private T JsonParse<T>(IFileInfo info, bool full = false)
     {
         using var reader = new StreamReader(info.OpenRead());
         var text = reader.ReadToEnd();
