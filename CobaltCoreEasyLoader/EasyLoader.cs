@@ -24,16 +24,23 @@ public class EasyLoader(
     /*  ModFolder
      *      Sprites/
      *          Characters/
-     *              CharA
-     *              CharB
-     *          Cards
-     *              CardA
-     *              CardB
-     *          ShipParts
-     *          Artifacts
+     *              characterA/
+     *                  mini/
+     *                      00.png
+     *                      01.png (etc.)
+     *                  neutral/
+     *                  happy/  (any emotion name here will be registered as
+     *              characterB/ (etc.)
+     *          Cards/
+     *              characterA/       (if you just want to define a deck then it can just be a
+     *                  cardnameA.png
+     *                  cardnameB.png (etc.)
+     *              characterB/ (etc.)
      *      Data/
+     *          Localization.csv
      *          Decks
-     *          Localization
+     *              characterA.toml
+     *              characterB.toml (etc.)
      *      SomeAssembly.dll
      */
 
@@ -77,7 +84,7 @@ public class EasyLoader(
         );
         var decks = MaybeLoadDeck(
             logger,
-            root.GetRelativeDirectory("Data"),
+            root.GetRelativeDirectory("Data/Decks"),
             content.Decks,
             RequestLocalization,
             sprites
@@ -236,7 +243,6 @@ public class EasyLoader(
                 sb.Insert(0, $"Found {count} unused localization lines\n");
                 logger.LogWarning("{}", sb.ToString());
                 sb.Clear();
-
             }
 
             if (missingLocalization.Count == 0) return;
@@ -264,6 +270,7 @@ public class EasyLoader(
             logger.LogWarning("Localiation file at {} was empty!", fileInfo.FullName);
             return new Dictionary<string, SingleLocalizationProvider>();
         }
+
         var headers = csvParser.Record!.ToList();
         while (csvParser.Read())
         {
@@ -277,7 +284,7 @@ public class EasyLoader(
 
             localization.Add(key, dict.GetValueOrDefault);
         }
-        
+
         return localization;
     }
 
@@ -380,7 +387,7 @@ public class EasyLoader(
             var ext = Path.GetExtension(fileInfo.Name);
             if (ext != ".json" && ext != ".toml")
             {
-                logger.LogWarning("Found non json file in Sprites directory: {}", fileInfo.FullName);
+                logger.LogWarning("Found non json/toml file in Sprites directory: {}", fileInfo.FullName);
                 continue;
             }
 
@@ -464,10 +471,21 @@ public class EasyLoader(
         return TomletMain.To<T>(text)!;
     }
 
-    private T JsonParse<T>(IFileInfo info)
+    private T JsonParse<T>(IFileInfo info, bool full=false)
     {
         using var reader = new StreamReader(info.OpenRead());
         var text = reader.ReadToEnd();
-        return JsonConvert.DeserializeObject<T>(text)!;
+        if (!full)
+        {
+            return JsonConvert.DeserializeObject<T>(text)!;
+        }
+
+        return JsonConvert.DeserializeObject<T>(
+            text,
+            new JsonSerializerSettings
+            {
+                TypeNameHandling = TypeNameHandling.All,
+            }
+        )!;
     }
 }
