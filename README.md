@@ -1,3 +1,17 @@
+# Cobalt Core Easy Loader
+
+Allows you to automatically load sprites and characters when modding Cobalt Core.  
+
+## Table of Contents
+1. [Installation](#installation)
+2. [Creating a Mod](#creating-a-mod)
+   1. [Setting up a Character](#setting-up-a-character)
+   2. [Setting up Sprites](#setting-up-sprites)
+   3. [Loading Dialogue](#loading-dialogue)
+   4. [Loading Sprites](#loading-sprites)
+3. [Examples](#examples)
+4. [Injected Values](#injected-values)
+
 
 ## Installation
 1. [Install Nickel](https://github.com/ITR13/CobaltCoreShipLoader/blob/main/how_to_install_nickel.md)
@@ -61,7 +75,7 @@ Most of this is the same as for regular Nickel mods, the only difference is "Mod
 This will ensure that the files get copied over to your mod directory correctly.
 6. Add a png file to the "Sprites" folder. If you run the program the log should now contain `[info][YourName.ProjectName] Loaded 1 sprites`. Depending on how you want to use the mod check out:
  - [Setting up a Character](#setting-up-a-character)
- - [Setting up Sprites](#full-guide)
+ - [Setting up Sprites](#setting-up-sprites)
  - [Loading Dialogue](#loading-dialogue)
  - [Only loading sprites](#loading-sprites) 
 
