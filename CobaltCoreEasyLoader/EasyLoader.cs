@@ -21,29 +21,6 @@ public class EasyLoader(
 )
     : IPluginLoader<IModManifest, Mod>
 {
-    /*  ModFolder
-     *      Sprites/
-     *          Characters/
-     *              characterA/
-     *                  mini/
-     *                      00.png
-     *                      01.png (etc.)
-     *                  neutral/
-     *                  happy/  (any emotion name here will be registered as
-     *              characterB/ (etc.)
-     *          Cards/
-     *              characterA/       (if you just want to define a deck then it can just be a
-     *                  cardnameA.png
-     *                  cardnameB.png (etc.)
-     *              characterB/ (etc.)
-     *      Data/
-     *          Localization.csv
-     *          Decks
-     *              characterA.toml
-     *              characterB.toml (etc.)
-     *      SomeAssembly.dll
-     */
-
     public OneOf<Yes, No, Error<string>> CanLoadPlugin(IPluginPackage<IModManifest> package)
     {
         return package.Manifest.ModType == "EasyLoader" ? pluginLoader.CanLoadPlugin(package) : new No();
@@ -351,7 +328,7 @@ public class EasyLoader(
     {
         if (!charactersDirectory.Exists)
         {
-            logger.LogWarning("Failed to find Sprites/Characters directory");
+            // logger.LogWarning("Failed to find Sprites/Characters directory");
             return new();
         }
 
@@ -424,7 +401,7 @@ public class EasyLoader(
     {
         if (!deckRoot.Exists)
         {
-            logger.LogWarning("Failed to find Decks directory");
+            // logger.LogWarning("Failed to find Decks directory");
             return new();
         }
 
@@ -486,7 +463,7 @@ public class EasyLoader(
     {
         if (!spriteRoot.Exists)
         {
-            logger.LogWarning("Failed to find Sprites directory");
+            // logger.LogWarning("Failed to find Sprites directory");
             return new Dictionary<string, ISpriteEntry>();
         }
 
