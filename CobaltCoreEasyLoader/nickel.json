@@ -1,7 +1,7 @@
 {
   "UniqueName": "ITR.EasyLoader",
-  "Version": "1.0.0",
-  "RequiredApiVersion": "0.2.0",
+  "Version": "1.0.1",
+  "RequiredApiVersion": "0.7.0",
   "ModType": "Nickel.Assembly",
   "EntryPointAssembly": "CobaltCoreEasyLoader.dll",
   "EntryPointType": "CobaltCoreEasyLoader.EasyLoaderMod"

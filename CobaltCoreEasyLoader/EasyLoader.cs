@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text;
 using CobaltCoreEasyLoader.Data;
 using CsvHelper;
+using HarmonyLib;
 using Microsoft.Extensions.Logging;
 using Nanoray.PluginManager;
 using Newtonsoft.Json;
@@ -26,7 +27,7 @@ public class EasyLoader(
         return package.Manifest.ModType == "EasyLoader" ? pluginLoader.CanLoadPlugin(package) : new No();
     }
 
-    public OneOf<Mod, Error<string>> LoadPlugin(IPluginPackage<IModManifest> package)
+    public PluginLoadResult<Mod> LoadPlugin(IPluginPackage<IModManifest> package)
     {
         var root = package.PackageRoot;
         var logger = modLoggerGetter(package);
@@ -184,10 +185,12 @@ public class EasyLoader(
                 new CharacterConfiguration
                 {
                     Deck = deck,
-                    StarterCardTypes = starterCard,
-                    StarterArtifactTypes = starterArtifacts,
+                    Starters = new StarterDeck
+                    {
+                        artifacts = starterArtifacts.Select(type => type.Constructor().Invoke(null) as Artifact).Where(cond => cond != null).Select(cond => cond!).ToList(),
+                        cards = starterCard.Select(type => type.Constructor().Invoke(null) as Card).Where(cond => cond != null).Select(cond => cond!).ToList(),
+                    },
                     StartLocked = startLocked,
-
                     BorderSprite = TryGetSprite("panel") ?? Spr.panels_char_colorless,
                     Description = RequestLocalization($"{deckName}/desc"),
                 }
