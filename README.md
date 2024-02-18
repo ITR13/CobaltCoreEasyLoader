@@ -15,7 +15,7 @@ Allows you to automatically load sprites and characters when modding Cobalt Core
 
 ## Installation
 1. [Install Nickel](https://github.com/ITR13/CobaltCoreShipLoader/blob/main/how_to_install_nickel.md)
-2. Put [EasyLoader.zip](https://github.com/ITR13/CobaltCoreEasyLoader/releases/download/v1.0.0/CobaltCoreEasyLoader.zip) into your mods folder.
+2. Put [EasyLoader.zip](https://github.com/ITR13/CobaltCoreEasyLoader/releases/download/v1.0.1/CobaltCoreEasyLoader.zip) into your mods folder.
 3. Put any Easy Loader mods in the same mods folder.
 
 ## Creating a Mod
